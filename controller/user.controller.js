@@ -1,3 +1,4 @@
+import jwt from 'jsonwebtoken'; 
 import bcrypt from "bcryptjs";
 import User from "../models/user.model.js";  // MySQL User model
 
@@ -67,6 +68,92 @@ export const register = async (req, res) => {
       console.log(error);
       return res.status(500).json({
         message: "Server error during registration",
+        success: false,
+      });
+    }
+  };
+  
+  export const login = async (req, res) => {
+    try {
+      const { username, password } = req.body;
+  
+      if (!username || !password) {
+        return res.status(400).json({
+          message: "Username or password is missing",
+          success: false,
+        });
+      }
+  
+      // Get the user by username
+      let user = await User.getUserByUsername(username);
+      if (!user) {
+        return res.status(400).json({
+          message: "Incorrect username or password",
+          success: false,
+        });
+      }
+  
+      // Compare password with the hashed password in the database
+      const isPasswordMatch = await bcrypt.compare(password, user.password);
+      if (!isPasswordMatch) {
+        return res.status(400).json({
+          message: "Incorrect username or password",
+          success: false,
+        });
+      }
+  
+      // Prepare the JWT payload
+      const tokenData = {
+        userId: user.id,  // Assuming the column for user ID is 'id'
+      };
+  
+      // Sign the token
+      const token = await jwt.sign(tokenData, process.env.SECRET_KEY, { expiresIn: "1d" });
+  
+      // Prepare user object without the password field
+      const userResponse = {
+        _id: user.id,
+        fullName: user.fullName,
+        email: user.email,
+        username: user.username,
+        phoneNumber: user.phoneNumber,
+        city: user.city,
+        skills: user.skills,
+        role: user.role,
+      };
+  
+      return res
+        .status(200)
+        .cookie("token", token, {
+          maxAge: 1 * 24 * 60 * 60 * 1000,
+          httpOnly: true,
+          sameSite: "strict",
+        })
+        .json({
+          message: `Welcome back ${userResponse.fullName}`,
+          user: userResponse,
+          token,
+          success: true,
+        });
+    } catch (error) {
+      console.log(error);
+      return res.status(500).json({
+        message: "Server error during login",
+        success: false,
+      });
+    }
+  };
+
+  export const logout = async (req, res) => {
+    try {
+      return res.status(200).cookie("token", "", { maxAge: 0 }).json({
+        message: "Logged out successfully",
+        success: true,
+      });
+    } catch (error) {
+      console.log(error);
+      return res.status(500).json({
+        message: "Server error during logout",
         success: false,
       });
     }
